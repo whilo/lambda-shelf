@@ -11,8 +11,8 @@
 
   :source-paths ["src/cljs" "src/clj"]
 
-  :dependencies [[org.clojure/clojure "1.5.1"]
-                 [org.clojure/clojurescript "0.0-2156"]
+  :dependencies [[org.clojure/clojure "1.6.0"]
+                 [org.clojure/clojurescript "0.0-2202"]
                  [org.clojure/core.async "0.1.0-SNAPSHOT"]
 
                  [log4j/log4j "1.2.17" :exclusions [javax.mail/mail javax.jms/jms com.sun.jdmk/jmxtools com.sun.jmx/jmxri]]
@@ -31,9 +31,8 @@
                  [hiccups "0.3.0"]
                  [sablono "0.2.14"]]
 
-  :plugins [[lein-cljsbuild "1.0.2"]
-            [com.cemerick/austin "0.1.4"]
-            [lein-ancient "0.5.4"]]
+  :plugins [[lein-cljsbuild "1.0.3"]
+            [com.cemerick/austin "0.1.4"]]
 
 ;  :repl-options {:init-ns lambda-shelf.core}
 
