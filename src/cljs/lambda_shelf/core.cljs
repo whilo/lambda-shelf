@@ -7,7 +7,7 @@
             [sablono.core :as html :refer-macros [html]]
             [lambda-shelf.bookmark :refer [bookmarks-view]]
             [lambda-shelf.login :refer [login-view]]
-            [lambda-shelf.communicator :refer [post-edn get-edn]])
+            [lambda-shelf.communicator :refer [connect!]])
   (:require-macros [hiccups.core :as hiccups]
                    [cljs.core.async.macros :refer [go]]))
 
