@@ -18,55 +18,27 @@
 ;; - consistency over repos
 
 
-(repo/new-repository "admin@polyc0l0r.net"
-                     {:type "s" :version 1}
-                     "A discourse organizer."
-                     true
-                     {:discourses #{}})
+#_(repo/new-repository "admin@polyc0l0r.net"
+                       "A discourse organizer."
+                       true
+                       {:discourses #{}})
 
 
-(defn new-state [update-fn]
+(defn new-state [init-stage update-fn]
   (go (let [store (<! (new-mem-store))
             peer (client-peer "shelf-client" store)
-            app-stage (-> ;; will be loaded from kv-store
-                       {:meta
-                        {:description "A discourse organizer.",
-                         :schema {:type "http://github.com/ghubber/geschichte", :version 1},
-                         :pull-requests {},
-                         :causal-order {#uuid "32026517-534c-597b-b58d-a0d098740e5e" []},
-                         :public true,
-                         :branches
-                         {"master" {:heads #{#uuid "32026517-534c-597b-b58d-a0d098740e5e"}}},
-                         :head "master",
-                         :last-update #inst "2014-05-05T18:51:54.561-00:00",
-                         :id #uuid "b03faa0b-a443-40db-850f-e9738f1f275f"},
-                        :author "admin@polyc0l0r.net",
-                        :schema {:type "s", :version 1},
-                        :transactions [],
-                        :type :meta-sub,
-                        :new-values
-                        {#uuid "32026517-534c-597b-b58d-a0d098740e5e"
-                         {:transactions
-                          [[#uuid "2411fb8d-a15a-501a-b567-e8ddd5dd1c44"
-                            #uuid "123ed64b-1e25-59fc-8c5b-038636ae6c3d"]],
-                          :parents [],
-                          :ts #inst "2014-05-05T18:51:54.561-00:00",
-                          :author "admin@polyc0l0r.net",
-                          :schema {:type "s", :version 1}},
-                         #uuid "2411fb8d-a15a-501a-b567-e8ddd5dd1c44" {:discourses #{}},
-                         #uuid "123ed64b-1e25-59fc-8c5b-038636ae6c3d"
-                         '(fn replace [old params] params)}}
-                       (s/wire-stage peer)
-                       <!
-                       s/sync!
-                       #_<!
-                       #_(s/connect! (str (if ssl? "wss://" "ws://")
-                                          (.getdomain uri)
-                                          ":"
-                                          (.getport uri)
-                                          "/geschichte/ws"))
-                       <!
-                       atom)
+            app-stage (-> init-stage
+                          (s/wire-stage peer)
+                          <!
+                          s/sync!
+                          #_<!
+                          #_(s/connect! (str (if ssl? "wss://" "ws://")
+                                             (.getdomain uri)
+                                             ":"
+                                             (.getport uri)
+                                             "/geschichte/ws"))
+                          <!
+                          atom)
             pub-ch (chan)]
 
         (go-loop [{:keys [meta] :as pm} (<! pub-ch)]
@@ -86,8 +58,7 @@
 
         (let [[p out] (:chans @app-stage)]
           (sub p :meta-pub pub-ch)
-          (>! out {:topic :meta-pub-req ;; init with stage
-                   :depth 0
+          (>! out {:topic :meta-pub-req
                    :user "admin@polyc0l0r.net"
                    :repo #uuid "b03faa0b-a443-40db-850f-e9738f1f275f"
                    :peer "STAGE"
@@ -97,11 +68,76 @@
                     :stages {:discourses app-stage}}})))
 
 
-#_(new-state #(println "NEW-VALUE: " %)
+#_(new-state {:meta
+              {:description "A discourse organizer.",
+               :schema {:type "http://github.com/ghubber/geschichte", :version 1},
+               :pull-requests {},
+               :causal-order {#uuid "3f4c6eaa-0529-59bc-8723-dbfdc427de48" []},
+               :public true,
+               :branches
+               {"master" {:heads #{#uuid "3f4c6eaa-0529-59bc-8723-dbfdc427de48"}}},
+               :head "master",
+               :last-update #inst "2014-05-06T11:10:22.797-00:00",
+               :id #uuid "7a68958b-620c-4f20-98a1-3f752151e14d"},
+              :author "admin@polyc0l0r.net",
+              :transactions [],
+              :type :meta-sub,
+              :new-values
+              {#uuid "3f4c6eaa-0529-59bc-8723-dbfdc427de48"
+               {:transactions
+                [[#uuid "2411fb8d-a15a-501a-b567-e8ddd5dd1c44"
+                  #uuid "123ed64b-1e25-59fc-8c5b-038636ae6c3d"]],
+                :parents [],
+                :ts #inst "2014-05-06T11:10:22.797-00:00",
+                :author "admin@polyc0l0r.net"},
+               #uuid "2411fb8d-a15a-501a-b567-e8ddd5dd1c44" {:discourses #{}},
+               #uuid "123ed64b-1e25-59fc-8c5b-038636ae6c3d"
+               '(fn replace [old params] params)}}
+             #(println "NEW-VALUE: " %)
              #_(om/transact!
-               nil
-               :discourses
-               (fn [_] %)))
+                nil
+                :discourses
+                (fn [_] %)))
+
+(defn add-stage [state user repo-id update-fn]
+  (go (let [{:keys [peer stages]} state
+            stage (-> {:meta ;; minimal metadata, filled in on meta-update
+                       {:schema {:type "http://github.com/ghubber/geschichte", :version 1},
+                        :pull-requests {},
+                        :last-update #inst "2014-05-06T11:10:22.797-00:00",
+                        :id repo-id},
+                       :author user,
+                       :transactions []}
+                      (s/wire-stage peer)
+                      <!
+                      s/sync!
+                      <!
+                      atom)
+            [p out] (get-in stages [:discourses :chans])
+            pub-ch (chan)]
+
+        (go-loop [{:keys [meta] :as pm} (<! pub-ch)]
+          (when pm
+            (let [new-stage (swap! stage update-in [:meta] update meta)]
+              (if (repo/merge-necessary? (:meta new-stage))
+                (go
+                  (<! (timeout (rand-int 10000)))
+                  (when (repo/merge-necessary? (:meta @stage))
+                    (.info js/console "MERGING" (pr-str (:meta @stage)))
+                    (<! (s/sync! (swap! stage repo/merge)))))
+                (let [nval (-> new-stage
+                               (s/realize-value store trans-fns)
+                               <!)]
+                  (update-fn nval))))
+            (recur (<! pub-ch))))
+
+        (sub p :meta-pub pub-ch)
+        (>! out {:topic :meta-pub-req ;; init with stage
+                 :user user
+                 :repo repo-id
+                 :peer "STAGE"
+                 :metas {"master" #{}}}))
+      (assoc-in state [:volatile :stages user repo-id] new-stage)))
 
 
 
